@@ -8,7 +8,7 @@ export default function CalculatorPage() {
   const [acres, setAcres] = useState(500);
   const [nCost, setNCost] = useState(0.65);
   const [nLbs, setNLbs] = useState(140);
-  const [algCost, setAlgCost] = useState(18);
+  const [algCost, setAlgCost] = useState(14);
 
   const nSavings = acres * nLbs * nCost * 0.20;
   const algTotal = acres * algCost;

@@ -37,7 +37,6 @@ create table if not exists treatment_rates (
 
 -- Allow all authenticated users to read treatment rates
 alter table treatment_rates enable row level security;
-drop policy if exists "Authenticated users can read rates" on treatment_rates;
 create policy "Authenticated users can read rates" on treatment_rates for select using (auth.role() = 'authenticated');
 
 -- ─── SEED TREATMENT RATES ───
