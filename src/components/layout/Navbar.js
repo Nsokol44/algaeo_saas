@@ -31,7 +31,12 @@ export default function Navbar() {
     router.push('/auth');
   };
 
-  const displayName = user?.user_metadata?.first_name || user?.email?.split('@')[0] || 'Farmer';
+  const displayName = 
+  user?.user_metadata?.first_name ||
+  user?.user_metadata?.full_name?.split(' ')[0] ||
+  user?.user_metadata?.name?.split(' ')[0] ||
+  user?.email?.split('@')[0] ||
+  'Farmer';
 
   return (
     <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 50 }}>

@@ -25,7 +25,8 @@ export default function TreatmentRates({ cropType }) {
 
   useEffect(() => {
     if (!cropType) return;
-    const key = cropType === 'soy' ? 'soybeans' : cropType;
+    const keyMap = { soy: 'soybeans', berry: 'berries', peanut: 'peanuts' };
+    const key = keyMap[cropType] || cropType;
     supabase
       .from('treatment_rates')
       .select('*')
