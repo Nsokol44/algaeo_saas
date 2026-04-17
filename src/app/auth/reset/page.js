@@ -14,11 +14,29 @@ export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Supabase puts the token in the URL hash — getSession picks it up automatically
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setReady(true);
-      else setError('Invalid or expired reset link. Please request a new one.');
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setReady(true);
+      } else if (event === 'SIGNED_IN' && session) {
+        const hash = window.location.hash;
+        if (hash.includes('type=recovery')) setReady(true);
+      }
     });
+
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery') || hash.includes('access_token')) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) setReady(true);
+        else setError('Invalid or expired reset link. Please request a new one.');
+      });
+    } else {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) setReady(true);
+        else setError('Invalid or expired reset link. Please request a new one.');
+      });
+    }
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleReset = async () => {
@@ -30,7 +48,8 @@ export default function ResetPasswordPage() {
     setLoading(false);
     if (error) { setError(error.message); return; }
     setSuccess(true);
-    setTimeout(() => router.push('/dashboard'), 2500);
+    await supabase.auth.signOut();
+    setTimeout(() => router.push('/auth'), 2500);
   };
 
   return (
@@ -38,32 +57,34 @@ export default function ResetPasswordPage() {
       <div style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--border2)', padding: '48px 40px' }}>
 
         <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 22, fontWeight: 800, color: 'var(--green)', marginBottom: 4 }}>Algaeo.io</div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 32 }}>Reset Your Password</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 32 }}>
+          {success ? 'Password Updated' : 'Set New Password'}
+        </div>
 
         {success ? (
           <div style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid var(--green-muted)', color: 'var(--green)', fontSize: 12, padding: '14px 16px', lineHeight: 1.7 }}>
-            ✓ Password updated successfully. Redirecting you to the dashboard...
+            ✓ Password updated. Redirecting to sign in...
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {!ready && !error && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Verifying reset link...</div>
+            )}
             {error && (
-              <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 12, padding: '10px 14px' }}>
+              <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 12, padding: '10px 14px', lineHeight: 1.6 }}>
                 {error}
-                {!ready && (
-                  <div style={{ marginTop: 8 }}>
-                    <span style={{ color: 'var(--green)', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => router.push('/auth')}>
-                      Back to sign in →
-                    </span>
-                  </div>
-                )}
+                <div style={{ marginTop: 8 }}>
+                  <span style={{ color: 'var(--green)', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => router.push('/auth')}>
+                    Back to sign in →
+                  </span>
+                </div>
               </div>
             )}
-
             {ready && (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>New Password</div>
-                  <input className="input-base" type="password" placeholder="Min 8 characters" value={password} onChange={e => setPassword(e.target.value)} />
+                  <input className="input-base" type="password" placeholder="Min 8 characters" value={password} onChange={e => setPassword(e.target.value)} autoFocus />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Confirm Password</div>
@@ -78,9 +99,7 @@ export default function ResetPasswordPage() {
         )}
 
         <div style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-          <a href="https://algaeo.com" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none' }}>
-            algaeo.com →
-          </a>
+          <a href="https://algaeo.com" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', textDecoration: 'none' }}>algaeo.com →</a>
         </div>
       </div>
     </div>

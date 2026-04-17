@@ -55,7 +55,7 @@ export default function AuthPage() {
     if (!fpEmail) { setError('Please enter your email address.'); return; }
     setLoading(true); setError(''); setSuccess('');
     const { error } = await supabase.auth.resetPasswordForEmail(fpEmail, {
-      redirectTo: `${window.location.origin}/auth/reset`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/reset`,
     });
     setLoading(false);
     if (error) { setError(error.message); return; }
