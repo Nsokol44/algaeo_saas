@@ -165,7 +165,10 @@ export default function SoilPage() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 24, marginBottom: 24 }}>
           <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Soil Photo Upload</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>
-            Upload a photo of your soil and our team will review it manually. You'll receive an email once feedback is ready.
+            Upload a photo of your soil and our team will review it manually. You'll receive an email once feedback is ready. 
+          </div>
+          <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.25)', fontSize: 11, color: 'var(--amber)', lineHeight: 1.7 }}>
+            <strong>Disclaimer:</strong> Color-based soil analysis is generated via a computational model and should be treated as an estimate only. For guaranteed microbial identification and quantification, verification with a 16S rRNA sequencing kit is strongly recommended.
           </div>
 
           <label style={{ display: 'block', cursor: 'pointer' }}>
