@@ -1,5 +1,6 @@
 import './globals.css';
 import { FarmProvider } from '@/lib/FarmContext';
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata = {
   title: 'Algaeo.io — Crop Intelligence Platform',
