@@ -12,9 +12,11 @@ const navLinks = [
   { href: '/soil',       label: 'Soil Score',     emoji: '🌱' },
   { href: '/schedule',   label: 'Reminders',      emoji: '📅' },
   { href: '/trials',     label: 'Field Trials',   emoji: '🔬' },
+  { href: '/field-planner', label: 'Field Planner',  emoji: '🗺️' },
   { href: '/archive',    label: 'Archive',        emoji: '📁' },
   { href: '/yield',      label: 'Yield Upload',   emoji: '📈' },
 ];
+
 
 export default function Navbar() {
   const pathname = usePathname();
