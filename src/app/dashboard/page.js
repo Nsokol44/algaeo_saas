@@ -9,10 +9,174 @@ import { useFarm } from '@/lib/FarmContext';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// ─── Container dosing data ────────────────────────────────────────────────────
+// Source: Algaeo session protocol — commercial cannabis grower (486 plants)
+// Apply on lowest-EC day of the week. Never same day as silica.
+const POT_SIZES = [
+  { label: '1 gal',  gal: 1,  ml: 35  },
+  { label: '2 gal',  gal: 2,  ml: 70  },
+  { label: '3 gal',  gal: 3,  ml: 105 },
+  { label: '5 gal',  gal: 5,  ml: 150 },
+  { label: '7 gal',  gal: 7,  ml: 210 },
+  { label: '10 gal', gal: 10, ml: 280 },
+  { label: '15 gal', gal: 15, ml: 400 },
+  { label: '25 gal', gal: 25, ml: 600 },
+];
+
+const FREQ_OPTIONS = [
+  { id: 'daily',     label: 'Daily',           daysPerWeek: 7  },
+  { id: 'eod',       label: 'Every other day', daysPerWeek: 3.5 },
+  { id: 'every3',    label: 'Every 3 days',    daysPerWeek: 2.33 },
+  { id: 'weekly',    label: 'Weekly',          daysPerWeek: 1  },
+];
+
+// Algaeo application frequency: once per week regardless of fertigation frequency
+// Apply on the lowest-EC day — biology receptivity is highest when salt load is lowest
+const ALGAEO_APPS_PER_WEEK = 1;
+const SEASON_WEEKS = 14; // avg veg + flower cycle
+
+function ContainerCalculator() {
+  const [potSize,    setPotSize]    = useState('5 gal');
+  const [plantCount, setPlantCount] = useState(100);
+  const [fertigFreq, setFertigFreq] = useState('eod');
+
+  const pot   = POT_SIZES.find(p => p.label === potSize) || POT_SIZES[3];
+  const freq  = FREQ_OPTIONS.find(f => f.id === fertigFreq) || FREQ_OPTIONS[1];
+
+  const mlPerPlantPerApp   = pot.ml;
+  const mlPerAppTotal      = mlPerPlantPerApp * plantCount;
+  const appsPerWeek        = ALGAEO_APPS_PER_WEEK;
+  const mlPerWeek          = mlPerAppTotal * appsPerWeek;
+  const litersPerWeek      = mlPerWeek / 1000;
+  const litersPerSeason    = litersPerWeek * SEASON_WEEKS;
+  const fertigEventsPerWeek = freq.daysPerWeek;
+  const algaeoRatio        = (appsPerWeek / fertigEventsPerWeek * 100).toFixed(0);
+
+  const label10 = {
+    fontSize: 10, color: 'var(--text-muted)',
+    letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6,
+  };
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 24, marginBottom: 32 }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>
+            Container Dosing Calculator
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Apply Algaeo <strong style={{ color: 'var(--green)' }}>once per week</strong> on your lowest-EC fertigation day — never same day as silica.
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg)', border: '1px solid var(--border2)', padding: '6px 12px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Liquid Format Only
+        </div>
+      </div>
+
+      {/* Inputs row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
+
+        {/* Pot size */}
+        <div>
+          <div style={label10}>Pot Size</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {POT_SIZES.map(p => (
+              <button key={p.label} onClick={() => setPotSize(p.label)} style={{
+                padding: '6px 10px', fontSize: 10, cursor: 'pointer',
+                fontFamily: 'DM Mono, monospace', letterSpacing: '0.04em',
+                border: `1px solid ${potSize === p.label ? 'var(--green)' : 'var(--border2)'}`,
+                background: potSize === p.label ? 'var(--green-muted)' : 'var(--bg)',
+                color: potSize === p.label ? 'var(--green)' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Plant count */}
+        <div>
+          <div style={label10}>Plant Count</div>
+          <input
+            className="input-base"
+            type="number"
+            value={plantCount}
+            onChange={e => setPlantCount(parseInt(e.target.value) || 1)}
+            style={{ marginBottom: 4 }}
+          />
+          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>plants</div>
+        </div>
+
+        {/* Fertigation frequency */}
+        <div>
+          <div style={label10}>Fertigation Frequency</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {FREQ_OPTIONS.map(f => (
+              <label key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="fertigFreq"
+                  value={f.id}
+                  checked={fertigFreq === f.id}
+                  onChange={() => setFertigFreq(f.id)}
+                  style={{ accentColor: 'var(--green)' }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{f.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Results */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+        {[
+          { label: 'Per Plant / Application', value: `${mlPerPlantPerApp} mL`,          sub: `${pot.label} pot`,              color: 'var(--green)', highlight: true },
+          { label: 'Per Application Total',   value: `${(mlPerAppTotal/1000).toFixed(1)} L`, sub: `${plantCount} plants`,     color: 'var(--text)' },
+          { label: 'Per Week',                value: `${litersPerWeek.toFixed(2)} L`,    sub: '1 application/week',            color: 'var(--text)' },
+          { label: 'Full Season (14 wks)',     value: `${litersPerSeason.toFixed(1)} L`, sub: 'veg + flower cycle',            color: 'var(--amber)' },
+          { label: 'Algaeo / Fertigation %',  value: `${algaeoRatio}%`,                  sub: `of ${freq.label.toLowerCase()} events`, color: 'var(--blue)' },
+        ].map(k => (
+          <div key={k.label} className={`kpi-card${k.highlight ? ' highlight' : ''}`}>
+            <div style={label10}>{k.label}</div>
+            <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 22, fontWeight: 700, color: k.color, letterSpacing: '-0.02em' }}>{k.value}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Protocol notes */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border2)', padding: '14px 18px' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>
+          Application Protocol
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {[
+            { icon: '✓', color: 'var(--green)', text: `Apply on your lowest-EC day — plain water or flush days have highest biology receptivity` },
+            { icon: '✓', color: 'var(--green)', text: `Kelp compatible — mix Algaeo directly into kelp solution at 1:15 ratio` },
+            { icon: '✓', color: 'var(--green)', text: `Great White mycorrhizal compatible — different ecological layers, no conflict` },
+            { icon: '✓', color: 'var(--green)', text: `Dosatron compatible — inject inline at 1:100 on drip lines` },
+            { icon: '⚠', color: 'var(--amber)', text: `Silica: apply separately — silica raises pH and conflicts with biology. Do silica day 1, Algaeo day 2` },
+            { icon: '⚠', color: 'var(--amber)', text: `Stop applications at flush / late flower (final 1–2 weeks)` },
+          ].map((n, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              <span style={{ color: n.color, flexShrink: 0, fontWeight: 700 }}>{n.icon}</span>
+              {n.text}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Extra crops ──────────────────────────────────────────────────────────────
 const EXTRA_CROPS = {
   hemp: {
     label: 'Hemp', emoji: '🌿', bundle: 'specialty',
-    // inputs and kpis come from hempMarketConfig[hempMarket]
   },
   cannabis: {
     label: 'Cannabis', emoji: '🌱', bundle: 'specialty',
@@ -47,6 +211,7 @@ const EXTRA_CROPS = {
 
 const ALL_CROPS = { ...cropConfig, ...EXTRA_CROPS };
 
+// ─── Main dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [crop, setCrop] = useState('corn');
   const [hempMarket, setHempMarket] = useState('cbd_flower');
@@ -188,6 +353,14 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {/* ── Container Dosing Calculator — cannabis only ── */}
+        {crop === 'cannabis' && (
+          <>
+            <div className="section-divider">Container Dosing Calculator</div>
+            <ContainerCalculator />
+          </>
+        )}
 
         {/* Treatment Rates */}
         <div className="section-divider">AgTurbo Application Guide</div>
