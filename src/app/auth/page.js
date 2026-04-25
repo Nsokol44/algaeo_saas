@@ -36,25 +36,25 @@ export default function AuthPage() {
     router.push('/dashboard');
   };
 
-  const handleSignUp = async () => {
-    if (!suFname || !suEmail || !suPass) { setError('Please fill all required fields.'); return; }
-    setLoading(true); setError('');
-    const { error } = await supabase.auth.signUp({
-      email: suEmail,
-      password: suPass,
-      options: {
-        data: {
-          first_name: suFname,
-          last_name: suLname,
-          farm_name: suFarm,
-          state: suState,
-          primary_crop: suCrop,
-        },
+const handleSignUp = async () => {
+  if (!suFname || !suEmail || !suPass) { setError('Please fill all required fields.'); return; }
+  setLoading(true); setError('');
+  const { data, error } = await supabase.auth.signUp({
+    email: suEmail,
+    password: suPass,
+    options: {
+      data: {
+        first_name: suFname,
+        last_name: suLname,
+        farm_name: suFarm,
+        state: suState,
+        primary_crop: suCrop,
       },
-    });
-    if (error) { setError(error.message); setLoading(false); return; }
-    router.push('/auth/verify');
-  };
+    },
+  });
+  if (error) { setError(error.message); setLoading(false); return; }
+  router.push('/dashboard');
+};
 
   const handleGoogle = async () => {
     await supabase.auth.signInWithOAuth({
