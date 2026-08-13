@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import { useFarm } from '@/lib/FarmContext';
 import { getUpcomingWindows, getMethodLabel } from '@/lib/growthStages';
@@ -11,44 +12,60 @@ const CROP_EMOJI = { corn:'🌽', soybeans:'🫘', peanuts:'🥜', tomatoes:'�
 
 export default function SchedulePage() {
   const { activeFarm } = useFarm();
+  const router = useRouter();
   const supabase = createClient();
   const [entries, setEntries] = useState([]);
   const [form, setForm] = useState({ cropType: 'corn', fieldName: '', plantedDate: '', acres: '', variety: '' });
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [userId, setUserId] = useState(null);
 
-  useEffect(() => { loadEntries(); }, [activeFarm]);
+  // Resolve user once on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user) { router.push('/auth'); return; }
+      setUserId(session.user.id);
+    });
+  }, []);
 
-  const loadEntries = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const q = supabase.from('planting_schedule').select('*').eq('user_id', user.id).order('planted_date', { ascending: false });
-    if (activeFarm) q.eq('farm_id', activeFarm.id);
+  // Load entries whenever userId or activeFarm changes
+  useEffect(() => {
+    if (userId) loadEntries(userId);
+  }, [userId, activeFarm?.id]);
+
+  const loadEntries = async (uid) => {
+    let q = supabase
+      .from('planting_schedule')
+      .select('*')
+      .eq('user_id', uid)
+      .order('planted_date', { ascending: false });
+    if (activeFarm?.id) q = q.eq('farm_id', activeFarm.id);
     const { data } = await q;
     setEntries(data || []);
   };
 
   const addEntry = async () => {
-    if (!form.plantedDate || !form.cropType) return;
+    if (!form.plantedDate || !form.cropType || !userId) return;
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('planting_schedule').insert({
-      user_id: user.id,
+    const { error } = await supabase.from('planting_schedule').insert({
+      user_id: userId,
       farm_id: activeFarm?.id || null,
       crop_type: form.cropType,
       field_name: form.fieldName,
       planted_date: form.plantedDate,
-      acres: form.acres || null,
+      acres: form.acres ? parseFloat(form.acres) : null,
       variety: form.variety,
     });
     setSaving(false);
-    setForm({ cropType: 'corn', fieldName: '', plantedDate: '', acres: '', variety: '' });
-    loadEntries();
+    if (!error) {
+      setForm({ cropType: 'corn', fieldName: '', plantedDate: '', acres: '', variety: '' });
+      loadEntries(userId);
+    }
   };
 
   const deleteEntry = async (id) => {
     await supabase.from('planting_schedule').delete().eq('id', id);
-    loadEntries();
+    loadEntries(userId);
   };
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -60,7 +77,6 @@ export default function SchedulePage() {
 
         <div className="section-divider">Application Reminders</div>
 
-        {/* Add planting */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 24, marginBottom: 28 }}>
           <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Add Planting Date</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>
@@ -85,14 +101,13 @@ export default function SchedulePage() {
               <input className="input-base" type="text" value={form.variety} placeholder="P1197AM" onChange={e => set('variety', e.target.value)} />
             </F>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <button className="btn-primary" onClick={addEntry} disabled={saving}>
+              <button className="btn-primary" onClick={addEntry} disabled={saving || !userId}>
                 {saving ? 'Saving...' : '+ Add'}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Entries + windows */}
         {entries.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>
             No plantings added yet. Add a planting date above to see your application windows.
@@ -107,8 +122,8 @@ export default function SchedulePage() {
 
           return (
             <div key={entry.id} style={{ background: 'var(--surface)', border: `1px solid ${active.length ? 'var(--green-muted)' : 'var(--border)'}`, marginBottom: 16 }}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', cursor: 'pointer' }} onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', cursor: 'pointer', flexWrap: 'wrap', gap: 8 }}
+                onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontSize: 22 }}>{CROP_EMOJI[entry.crop_type]}</span>
                   <div>
@@ -116,7 +131,7 @@ export default function SchedulePage() {
                       {CROP_LABELS[entry.crop_type]}{entry.field_name ? ` — ${entry.field_name}` : ''}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Planted {new Date(entry.planted_date).toLocaleDateString()}{entry.acres ? ` · ${entry.acres} acres` : ''}{entry.variety ? ` · ${entry.variety}` : ''}
+                      Planted {new Date(entry.planted_date + 'T12:00:00').toLocaleDateString()}{entry.acres ? ` · ${entry.acres} acres` : ''}{entry.variety ? ` · ${entry.variety}` : ''}
                     </div>
                   </div>
                 </div>
@@ -127,24 +142,23 @@ export default function SchedulePage() {
                     </div>
                   )}
                   {upcoming.length > 0 && !active.length && (
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Next: {upcoming[0].daysUntilStart}d</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Next in {upcoming[0].daysUntilStart}d</div>
                   )}
                   <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{isExpanded ? '▲' : '▼'}</span>
-                  <button onClick={e => { e.stopPropagation(); deleteEntry(entry.id); }} style={{ fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>Remove</button>
+                  <button onClick={e => { e.stopPropagation(); deleteEntry(entry.id); }}
+                    style={{ fontSize: 10, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>
+                    Remove
+                  </button>
                 </div>
               </div>
 
-              {/* Windows */}
               {isExpanded && (
                 <div style={{ borderTop: '1px solid var(--border)', padding: '16px 20px' }}>
                   {windows.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>All application windows completed for this season.</div>}
                   {windows.map((w, i) => (
-                    <div key={i} style={{
-                      display: 'flex', alignItems: 'flex-start', gap: 16, padding: '12px 0',
-                      borderBottom: i < windows.length - 1 ? '1px solid var(--border)' : 'none',
-                    }}>
-                      {/* Status indicator */}
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', marginTop: 3, flexShrink: 0,
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: '12px 0', borderBottom: i < windows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div style={{
+                        width: 10, height: 10, borderRadius: '50%', marginTop: 3, flexShrink: 0,
                         background: w.status === 'active' ? 'var(--green)' : w.status === 'past' ? 'var(--border2)' : 'var(--text-muted)',
                         boxShadow: w.status === 'active' ? '0 0 8px var(--green)' : 'none',
                       }} />
