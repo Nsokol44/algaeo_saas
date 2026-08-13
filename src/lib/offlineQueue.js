@@ -121,6 +121,9 @@ export async function syncPending(supabase, { onProgress } = {}) {
         if (item.farmIdForGuestAccess) {
           await supabase.from('guest_farm_access').upsert({ guest_user_id: userId, farm_id: item.farmIdForGuestAccess, invite_id: item.inviteId || null }).catch(() => {});
         }
+        if (item.trialIdForGuestAccess) {
+          await supabase.from('guest_trial_access').upsert({ guest_user_id: userId, trial_id: item.trialIdForGuestAccess, invite_id: item.inviteId || null }).catch(() => {});
+        }
       }
 
       let photoUrl = null;

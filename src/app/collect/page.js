@@ -70,11 +70,13 @@ function CollectInner() {
   }, [step]);
 
   const validateToken = async () => {
-    const { data } = await supabase.from('guest_invites').select('*, farms(name, nickname)').eq('token', token).eq('active', true).single();
+    const { data } = await supabase.from('guest_invites').select('*, farms(name, nickname), field_trials(name, crop_type, field_name)').eq('token', token).eq('active', true).single();
     if (!data) { setError('This invite link is invalid or has expired.'); return; }
     if (new Date(data.expires_at) < new Date()) { setError('This invite link has expired.'); return; }
     if (data.use_count >= data.max_uses) { setError('This invite link has reached its maximum uses.'); return; }
     setInvite(data);
+    if (data.field_trials?.crop_type) setForm((p) => ({ ...p, cropType: data.field_trials.crop_type }));
+    if (data.field_trials?.field_name) setForm((p) => ({ ...p, fieldName: data.field_trials.field_name }));
   };
 
   const sendMagicLink = async () => {
@@ -133,7 +135,8 @@ function CollectInner() {
     const delta = nearestSample({ id: null, lat: gps.position.lat, lng: gps.position.lng }, sessionSamples.map((s, i) => ({ ...s, id: i })));
 
     const rowBase = {
-      farm_id: invite.farm_id,
+      farm_id: invite.farm_id || null,
+      trial_id: invite.trial_id || null,
       field_name: form.fieldName || null,
       sample_date: form.sampleDate,
       lat: gps.position.lat, lng: gps.position.lng,
@@ -171,7 +174,12 @@ function CollectInner() {
         await supabase.from('guest_invites').update({ use_count: invite.use_count + 1 }).eq('id', invite.id);
       });
       if (session?.user?.id) {
-        await supabase.from('guest_farm_access').upsert({ guest_user_id: session.user.id, farm_id: invite.farm_id, invite_id: invite.id });
+        if (invite.trial_id) {
+          await supabase.from('guest_trial_access').upsert({ guest_user_id: session.user.id, trial_id: invite.trial_id, invite_id: invite.id });
+        }
+        if (invite.farm_id) {
+          await supabase.from('guest_farm_access').upsert({ guest_user_id: session.user.id, farm_id: invite.farm_id, invite_id: invite.id });
+        }
       }
     } else {
       await queueSample({
@@ -180,7 +188,8 @@ function CollectInner() {
         storagePathPrefix: `guests/${session?.user?.id || 'pending'}`,
         needsAnonAuth: !session?.user?.id,
         inviteId: invite.id,
-        farmIdForGuestAccess: invite.farm_id,
+        farmIdForGuestAccess: invite.farm_id || null,
+        trialIdForGuestAccess: invite.trial_id || null,
       });
       offlineSync.refreshCount();
     }
@@ -195,6 +204,8 @@ function CollectInner() {
   };
 
   const farmName = invite?.farms?.nickname || invite?.farms?.name || 'the farm';
+  const trialName = invite?.field_trials?.name || null;
+  const contextLabel = trialName ? `${trialName}${invite?.farms ? ` — ${farmName}` : ''}` : farmName;
   const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   if (error) {
@@ -235,7 +246,7 @@ function CollectInner() {
               <CompassNeedle size={52} />
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8, marginBottom: 24 }}>
-              <strong style={{ color: 'var(--text-dim)' }}>{invite.label}</strong> — collecting for <strong style={{ color: 'var(--text-dim)' }}>{farmName}</strong>
+              <strong style={{ color: 'var(--text-dim)' }}>{invite.label}</strong> — collecting for <strong style={{ color: 'var(--text-dim)' }}>{contextLabel}</strong>
             </div>
 
             <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 24, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
@@ -285,7 +296,7 @@ function CollectInner() {
         {step === 'collect' && invite && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', padding: 24 }}>
             <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Collect Soil Sample</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>Collecting for: <span style={{ color: 'var(--green)' }}>{farmName}</span>{session ? ` · Signed in as ${session.user.email}` : ' · Guest'}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 20 }}>Collecting for: <span style={{ color: 'var(--green)' }}>{contextLabel}</span>{session ? ` · Signed in as ${session.user.email}` : ' · Guest'}</div>
 
             {sessionSamples.length > 0 && <SessionSummary samples={sessionSamples} startedAt={sessionStart} />}
 
@@ -363,7 +374,7 @@ function CollectInner() {
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8, marginBottom: 20 }}>
               {lastResult.offline
                 ? 'No signal right now — this sample is stored on your device and will sync automatically once you\u2019re back in range.'
-                : <>Saved to <strong style={{ color: 'var(--text-dim)' }}>{farmName}</strong>. {session ? 'You can log in to algaeo.io to see your results.' : 'Create a free guest account to track your results and receive Algaeo feedback.'}</>}
+                : <>Saved to <strong style={{ color: 'var(--text-dim)' }}>{contextLabel}</strong>. {session ? 'You can log in to algaeo.io to see your results.' : 'Create a free guest account to track your results and receive Algaeo feedback.'}</>}
             </div>
 
             {lastResult.delta && (

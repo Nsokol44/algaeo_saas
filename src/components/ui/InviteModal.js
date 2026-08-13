@@ -2,30 +2,39 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
 
-export default function InviteModal({ farm, onClose }) {
+/**
+ * Invite collectors for either a Farm or a Field Trial — pass exactly one of
+ * `farm` / `trial`. Trial-scoped invites don't require a Farm record to exist.
+ */
+export default function InviteModal({ farm, trial, onClose }) {
   const supabase = createClient();
+  const scopeType = trial ? 'trial' : 'farm';
+  const scopeId = trial ? trial.id : farm?.id;
+  const scopeLabel = trial ? trial.name : (farm?.nickname || farm?.name);
+
   const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
   const [copiedId, setCopiedId] = useState(null);
 
-  useEffect(() => { loadInvites(); }, [farm?.id]);
+  useEffect(() => { loadInvites(); }, [scopeType, scopeId]);
 
   const loadInvites = async () => {
-    if (!farm?.id) { setLoading(false); return; }
+    if (!scopeId) { setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase.from('guest_invites').select('*').eq('farm_id', farm.id).order('created_at', { ascending: false });
+    const { data } = await supabase.from('guest_invites').select('*').eq(scopeType === 'trial' ? 'trial_id' : 'farm_id', scopeId).order('created_at', { ascending: false });
     setInvites(data || []);
     setLoading(false);
   };
 
   const createInvite = async () => {
-    if (!farm?.id) return;
+    if (!scopeId) return;
     setCreating(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from('guest_invites').insert({
-      farm_id: farm.id,
+      farm_id: trial ? (trial.farm_id || null) : farm.id,
+      trial_id: trial ? trial.id : null,
       created_by: user?.id,
       label: label || 'Field Collectors',
     }).select().single();
@@ -57,7 +66,7 @@ export default function InviteModal({ farm, onClose }) {
   const shareLink = (invite) => {
     const link = linkFor(invite);
     if (navigator.share) {
-      navigator.share({ title: `Collect soil samples for ${farm?.nickname || farm?.name}`, url: link }).catch(() => {});
+      navigator.share({ title: `Collect soil samples for ${scopeLabel}`, url: link }).catch(() => {});
     } else {
       copyLink(invite);
     }
@@ -72,7 +81,7 @@ export default function InviteModal({ farm, onClose }) {
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 22 }}>
           Share a link so anyone — a scout, agronomist, or family member — can drop GPS-tagged soil samples for
-          {' '}<strong style={{ color: 'var(--text-dim)' }}>{farm?.nickname || farm?.name || 'this farm'}</strong>. They don't need an Algaeo account, and it works even with no signal in the field.
+          {' '}<strong style={{ color: 'var(--text-dim)' }}>{scopeLabel || (trial ? 'this trial' : 'this farm')}</strong>. They don't need an Algaeo account, and it works even with no signal in the field.
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 22 }}>

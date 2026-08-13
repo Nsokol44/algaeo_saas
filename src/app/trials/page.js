@@ -1,16 +1,20 @@
 'use client';
 import{useState,useEffect}from'react';
 import{useRouter}from'next/navigation';
+import Link from'next/link';
 import Navbar from'@/components/layout/Navbar';
+import InviteModal from'@/components/ui/InviteModal';
 import{useFarm}from'@/lib/FarmContext';
 import{createClient}from'@/lib/supabase';
 const CROPS=['corn','soybeans','peanuts','tomatoes','berries','pasture','miscanthus','hemp','cannabis'];
 const CROP_EMOJI={corn:'🌽',soybeans:'🫘',peanuts:'🥜',tomatoes:'🍅',berries:'🍓',pasture:'🌿',miscanthus:'🌾',hemp:'🌿',cannabis:'🌱'};
 const METHODS=['foliar','soil_drench','fertigation','in_furrow','seed_treatment'];
 const scoreColor=s=>s>=8?'var(--green)':s>=5?'var(--amber)':'#f87171';
+const sampleScoreColor=s=>s>=8?'#4ade80':s>=6?'#fbbf24':s>=4?'#fb923c':'#f87171';
 export default function TrialsPage(){
   const{activeFarm}=useFarm();const router=useRouter();const supabase=createClient();
   const[userId,setUserId]=useState(null);const[trials,setTrials]=useState([]);const[publicTrials,setPublicTrials]=useState([]);const[view,setView]=useState('my');const[activeTrial,setActiveTrial]=useState(null);const[entries,setEntries]=useState([]);const[showNewTrial,setShowNewTrial]=useState(false);const[showNewEntry,setShowNewEntry]=useState(false);const[saving,setSaving]=useState(false);
+  const[trialSamples,setTrialSamples]=useState([]);const[loadingSamples,setLoadingSamples]=useState(false);const[showTrialInvite,setShowTrialInvite]=useState(false);
   const[trialForm,setTrialForm]=useState({name:'',cropType:'corn',fieldName:'',acres:'',startedDate:'',notes:'',isPublic:false});
   const[entryForm,setEntryForm]=useState({entryDate:new Date().toISOString().split('T')[0],weekNumber:'',algaeoApplied:true,applicationMethod:'foliar',plantHeightIn:'',canopyWidthIn:'',leafColorScore:'',vigorScore:'',stressScore:'',pestPressure:'',estimatedYield:'',yieldUnit:'',brixReading:'',standCount:'',soilTempF:'',airTempF:'',rainfallIn:'',observations:''});
   const[treatedPhoto,setTreatedPhoto]=useState(null);const[controlPhoto,setControlPhoto]=useState(null);const[treatedPreview,setTreatedPreview]=useState(null);const[controlPreview,setControlPreview]=useState(null);
@@ -18,8 +22,9 @@ export default function TrialsPage(){
   const loadTrials=async(uid)=>{let q=supabase.from('field_trials').select('*').eq('user_id',uid).order('created_at',{ascending:false});if(activeFarm?.id)q=q.eq('farm_id',activeFarm.id);const{data}=await q;setTrials(data||[]);};
   const loadPublicTrials=async()=>{const{data}=await supabase.from('field_trials').select('*').eq('is_public',true).order('created_at',{ascending:false}).limit(20);setPublicTrials(data||[]);};
   const loadEntries=async(trialId)=>{const{data}=await supabase.from('trial_entries').select('*').eq('trial_id',trialId).order('entry_date');setEntries(data||[]);};
-  const openTrial=t=>{setActiveTrial(t);loadEntries(t.id);};
-  const createTrial=async()=>{if(!trialForm.name||!userId)return;setSaving(true);const{data,error}=await supabase.from('field_trials').insert({user_id:userId,farm_id:activeFarm?.id||null,name:trialForm.name,crop_type:trialForm.cropType,field_name:trialForm.fieldName,acres:trialForm.acres||null,started_date:trialForm.startedDate||null,notes:trialForm.notes,is_public:trialForm.isPublic}).select().single();setSaving(false);if(!error){setShowNewTrial(false);loadTrials(userId);setActiveTrial(data);loadEntries(data.id);}};
+  const loadTrialSamples=async(trialId)=>{setLoadingSamples(true);const{data}=await supabase.from('soil_samples').select('*').eq('trial_id',trialId).order('created_at',{ascending:false});setTrialSamples(data||[]);setLoadingSamples(false);};
+  const openTrial=t=>{setActiveTrial(t);loadEntries(t.id);loadTrialSamples(t.id);};
+  const createTrial=async()=>{if(!trialForm.name||!userId)return;setSaving(true);const{data,error}=await supabase.from('field_trials').insert({user_id:userId,farm_id:activeFarm?.id||null,name:trialForm.name,crop_type:trialForm.cropType,field_name:trialForm.fieldName,acres:trialForm.acres||null,started_date:trialForm.startedDate||null,notes:trialForm.notes,is_public:trialForm.isPublic}).select().single();setSaving(false);if(!error){setShowNewTrial(false);loadTrials(userId);setActiveTrial(data);loadEntries(data.id);loadTrialSamples(data.id);}};
   const uploadPhoto=async(file,path)=>{if(!file)return null;const ext=file.name.split('.').pop();const fp=`${path}.${ext}`;const{error}=await supabase.storage.from('soil-photos').upload(fp,file,{upsert:true});if(error)return null;const{data}=supabase.storage.from('soil-photos').getPublicUrl(fp);return data?.publicUrl||null;};
   const addEntry=async()=>{if(!activeTrial||!userId)return;setSaving(true);const base=`${userId}/trials/${activeTrial.id}/${Date.now()}`;const[tu,cu]=await Promise.all([uploadPhoto(treatedPhoto,`${base}_treated`),uploadPhoto(controlPhoto,`${base}_control`)]);const n=v=>v!==''?parseFloat(v):null;await supabase.from('trial_entries').insert({trial_id:activeTrial.id,user_id:userId,entry_date:entryForm.entryDate,week_number:n(entryForm.weekNumber),photo_treated_url:tu,photo_control_url:cu,plant_height_in:n(entryForm.plantHeightIn),canopy_width_in:n(entryForm.canopyWidthIn),leaf_color_score:n(entryForm.leafColorScore),vigor_score:n(entryForm.vigorScore),stress_score:n(entryForm.stressScore),pest_pressure:n(entryForm.pestPressure),estimated_yield:n(entryForm.estimatedYield),yield_unit:entryForm.yieldUnit||null,brix_reading:n(entryForm.brixReading),stand_count:n(entryForm.standCount),soil_temp_f:n(entryForm.soilTempF),air_temp_f:n(entryForm.airTempF),rainfall_in:n(entryForm.rainfallIn),observations:entryForm.observations||null,algaeo_applied:entryForm.algaeoApplied,application_method:entryForm.algaeoApplied?entryForm.applicationMethod:null});setSaving(false);setShowNewEntry(false);setTreatedPhoto(null);setControlPhoto(null);setTreatedPreview(null);setControlPreview(null);loadEntries(activeTrial.id);};
   const setF=(k,v)=>setEntryForm(p=>({...p,[k]:v}));const setTF=(k,v)=>setTrialForm(p=>({...p,[k]:v}));
@@ -46,9 +51,48 @@ export default function TrialsPage(){
         <div style={{background:'var(--surface)',border:'1px solid var(--border)',padding:'18px 20px',marginBottom:16}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
             <div><div style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:700,color:'var(--text)'}}>{activeTrial.name}</div><div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>{activeTrial.crop_type}{activeTrial.field_name?` · ${activeTrial.field_name}`:''}{activeTrial.acres?` · ${activeTrial.acres} acres`:''}</div>{activeTrial.notes&&<div style={{fontSize:11,color:'var(--text-dim)',marginTop:6}}>{activeTrial.notes}</div>}</div>
-            {activeTrial.user_id===userId&&<button className="btn-primary" onClick={()=>setShowNewEntry(true)}>+ Add Entry</button>}
+            {activeTrial.user_id===userId&&<div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              <button onClick={()=>setShowTrialInvite(true)} style={{padding:'9px 14px',fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',border:'1px solid var(--green-muted)',background:'var(--green-glow)',color:'var(--green)',cursor:'pointer',fontFamily:'DM Mono,monospace'}}>👥 Invite</button>
+              <Link href={`/samples?view=add&trialId=${activeTrial.id}&trialName=${encodeURIComponent(activeTrial.name)}&fieldName=${encodeURIComponent(activeTrial.field_name||'')}&cropType=${activeTrial.crop_type}`} style={{padding:'9px 14px',fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',border:'1px solid var(--border2)',background:'var(--surface2)',color:'var(--text-dim)',cursor:'pointer',fontFamily:'DM Mono,monospace',textDecoration:'none',display:'inline-flex',alignItems:'center'}}>📍 Collect Sample</Link>
+              <button className="btn-primary" onClick={()=>setShowNewEntry(true)}>+ Add Entry</button>
+            </div>}
           </div>
         </div>
+
+        {/* Soil Samples for this trial's field — nested right under the trial, not a separate top-level list */}
+        <div style={{background:'var(--surface)',border:'1px solid var(--border)',padding:'16px 20px',marginBottom:16}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+            <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)'}}>📍 Soil Samples{trialSamples.length>0?` (${trialSamples.length})`:''}</div>
+            {activeTrial.user_id===userId&&trialSamples.length===0&&!loadingSamples&&(
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>setShowTrialInvite(true)} style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',background:'none',border:'1px solid var(--border2)',color:'var(--text-muted)',padding:'5px 10px',cursor:'pointer',fontFamily:'DM Mono,monospace'}}>👥 Invite Collectors</button>
+                <Link href={`/samples?view=add&trialId=${activeTrial.id}&trialName=${encodeURIComponent(activeTrial.name)}&fieldName=${encodeURIComponent(activeTrial.field_name||'')}&cropType=${activeTrial.crop_type}`} style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',background:'none',border:'1px solid var(--border2)',color:'var(--text-muted)',padding:'5px 10px',cursor:'pointer',fontFamily:'DM Mono,monospace',textDecoration:'none'}}>+ Collect First Sample</Link>
+              </div>
+            )}
+          </div>
+          {loadingSamples&&<div style={{fontSize:11,color:'var(--text-muted)',padding:'12px 0'}}>Loading…</div>}
+          {!loadingSamples&&trialSamples.length===0&&(
+            <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.7}}>No soil samples logged for this field yet. Invite a collector or drop a GPS pin yourself.</div>
+          )}
+          {!loadingSamples&&trialSamples.length>0&&(
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {trialSamples.map(s=>(
+                <div key={s.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--surface2)',border:'1px solid var(--border)',padding:'10px 12px'}}>
+                  {s.photo_url&&<img src={s.photo_url} style={{width:36,height:36,objectFit:'cover',flexShrink:0}} alt=""/>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:11,color:'var(--text-dim)'}}>{s.field_name||'Soil Sample'} · {new Date(s.sample_date+'T12:00:00').toLocaleDateString()}</div>
+                    {s.notes&&<div style={{fontSize:10,color:'var(--text-muted)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:800,color:sampleScoreColor(s.health_score||5)}}>{s.health_score||'?'}</div>
+                    <div style={{fontSize:8,color:'var(--text-muted)'}}>{s.score_label||'—'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {entries.length===0&&<div style={{fontSize:12,color:'var(--text-muted)',textAlign:'center',padding:40}}>No entries yet.</div>}
         {entries.map((entry,idx)=><div key={entry.id} style={{background:'var(--surface)',border:'1px solid var(--border)',padding:'18px 20px',marginBottom:14}}>
           <div style={{marginBottom:14}}><div style={{fontFamily:'Syne,sans-serif',fontSize:13,fontWeight:600,color:'var(--text)'}}>{entry.week_number?`Week ${entry.week_number}`:`Entry ${idx+1}`} — {new Date(entry.entry_date+'T12:00:00').toLocaleDateString()}</div>{entry.algaeo_applied&&<div style={{fontSize:10,color:'var(--green)',marginTop:2}}>✓ AgTurbo Applied — {entry.application_method?.replace('_',' ')}</div>}</div>
@@ -95,6 +139,7 @@ export default function TrialsPage(){
       <F label="Observations"><textarea className="input-base" value={entryForm.observations} onChange={e=>setF('observations',e.target.value)} placeholder="Visible differences, conditions..." style={{resize:'vertical',minHeight:80}}/></F>
       <button className="btn-primary" onClick={addEntry} disabled={saving}>{saving?'Saving...':'Save Entry →'}</button>
     </Modal>}
+    {showTrialInvite&&activeTrial&&<InviteModal trial={activeTrial} onClose={()=>setShowTrialInvite(false)}/>}
   </div></div>);
 }
 function Modal({title,onClose,children,wide}){return(<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:'var(--surface)',border:'1px solid var(--border2)',width:'100%',maxWidth:wide?680:520,maxHeight:'90vh',overflowY:'auto',padding:32}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:24}}><div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)'}}>{title}</div><button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:16}}>✕</button></div><div style={{display:'flex',flexDirection:'column',gap:14}}>{children}</div></div></div>);}

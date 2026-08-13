@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import InviteModal from '@/components/ui/InviteModal';
 import AccuracyRing from '@/components/ui/AccuracyRing';
@@ -34,13 +34,31 @@ const emptyForm = (activeFarm) => ({
 });
 
 export default function SoilSamplesPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: 'var(--green)', fontFamily: 'Syne, sans-serif' }}>Loading...</div></div>}>
+      <SoilSamplesInner />
+    </Suspense>
+  );
+}
+
+function SoilSamplesInner() {
   const { activeFarm } = useFarm();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  // A collector can land here from a specific Field Trial (via /samples?view=add&trialId=...)
+  // so this sample gets tagged to that trial's field instead of being untethered.
+  const trialId = searchParams.get('trialId');
+  const trialName = searchParams.get('trialName');
+  const prefillFieldName = searchParams.get('fieldName') || '';
+  const prefillCropType = searchParams.get('cropType');
+  const startInAdd = searchParams.get('view') === 'add';
+
 
   const [userId, setUserId] = useState(null);
   const [samples, setSamples] = useState([]);
-  const [view, setView] = useState('map'); // 'map' | 'list' | 'add' | 'saved'
+  const [view, setView] = useState(startInAdd ? 'add' : 'map'); // 'map' | 'list' | 'add' | 'saved'
   const [saving, setSaving] = useState(false);
   const [selectedSample, setSelectedSample] = useState(null);
   const [showLabEntry, setShowLabEntry] = useState(false);
@@ -50,7 +68,7 @@ export default function SoilSamplesPage() {
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
 
-  const [form, setForm] = useState(emptyForm(activeFarm));
+  const [form, setForm] = useState({ ...emptyForm(activeFarm), fieldName: prefillFieldName, cropType: prefillCropType || 'corn' });
   const [photoPreview, setPhotoPreview] = useState(null); // compressed data URL
   const [analyzing, setAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
@@ -81,7 +99,7 @@ export default function SoilSamplesPage() {
   }, [view, samples]);
 
   useEffect(() => {
-    setForm(emptyForm(activeFarm));
+    setForm({ ...emptyForm(activeFarm), fieldName: prefillFieldName, cropType: prefillCropType || 'corn' });
   }, [activeFarm?.id]);
 
   // Auto-start GPS the moment the collect form opens — no extra tap needed.
@@ -164,7 +182,7 @@ export default function SoilSamplesPage() {
   };
 
   const resetFormForNext = () => {
-    setForm(emptyForm(activeFarm));
+    setForm({ ...emptyForm(activeFarm), fieldName: prefillFieldName, cropType: prefillCropType || 'corn' });
     setPhotoPreview(null);
     setAiAnalysis(null);
     setAiNote(null);
@@ -189,6 +207,7 @@ export default function SoilSamplesPage() {
     const rowBase = {
       user_id: userId,
       farm_id: activeFarm?.id || null,
+      trial_id: trialId || null,
       field_name: form.fieldName || null,
       sample_date: form.sampleDate,
       lat: gps.position.lat,
@@ -283,7 +302,7 @@ export default function SoilSamplesPage() {
                 cursor: 'pointer', fontFamily: 'DM Mono, monospace',
               }}>{v === 'map' ? '🗺 Map' : '📋 List'}</button>
             ))}
-            {activeFarm && (
+            {(activeFarm || trialId) && (
               <button onClick={() => setShowInvite(true)} style={{
                 padding: '7px 14px', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
                 border: '1px solid var(--green-muted)', background: 'var(--green-glow)', color: 'var(--green)',
@@ -428,6 +447,11 @@ export default function SoilSamplesPage() {
         {view === 'add' && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: 24 }}>
             <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Collect Soil Sample</div>
+            {trialId && trialName && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, letterSpacing: '0.04em', color: 'var(--green)', background: 'var(--green-glow)', border: '1px solid var(--green-muted)', padding: '4px 10px', marginBottom: 12 }}>
+                🔬 For trial: {trialName}
+              </div>
+            )}
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 24 }}>Standing at your sample spot, the GPS lock happens automatically below.</div>
 
             {/* GPS — auto-starts, ring tightens as it locks */}
@@ -521,7 +545,7 @@ export default function SoilSamplesPage() {
                 <button className="btn-primary" onClick={saveSample} disabled={saving || !gps.position} style={{ flex: 1 }}>
                   {saving ? 'Saving...' : !gps.position ? 'Waiting on GPS...' : !offlineSync.online ? 'Save Offline →' : 'Save Sample →'}
                 </button>
-                <button onClick={() => setView('map')} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border2)', padding: '10px 16px', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>Cancel</button>
+                <button onClick={() => (trialId ? router.push('/trials') : setView('map'))} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border2)', padding: '10px 16px', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>{trialId ? '← Back to Trial' : 'Cancel'}</button>
               </div>
             </div>
           </div>
@@ -556,7 +580,11 @@ export default function SoilSamplesPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', marginTop: 16 }}>
               <button className="btn-primary" onClick={goCollectAnother}>+ Collect Another Sample</button>
-              <button onClick={() => { setView('map'); mapInstanceRef.current = null; markersRef.current = []; }} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border2)', padding: '10px 16px', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>View Map</button>
+              {trialId ? (
+                <button onClick={() => router.push('/trials')} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border2)', padding: '10px 16px', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>← Back to Trial</button>
+              ) : (
+                <button onClick={() => { setView('map'); mapInstanceRef.current = null; markersRef.current = []; }} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: '1px solid var(--border2)', padding: '10px 16px', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}>View Map</button>
+              )}
             </div>
           </div>
         )}
@@ -596,7 +624,13 @@ export default function SoilSamplesPage() {
           </div>
         )}
 
-        {showInvite && activeFarm && <InviteModal farm={activeFarm} onClose={() => setShowInvite(false)} />}
+        {showInvite && (activeFarm || trialId) && (
+          <InviteModal
+            farm={trialId ? null : activeFarm}
+            trial={trialId ? { id: trialId, name: trialName || 'this trial', farm_id: activeFarm?.id || null } : null}
+            onClose={() => setShowInvite(false)}
+          />
+        )}
 
       </div>
       <style>{`
