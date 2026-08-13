@@ -1,0 +1,13 @@
+-- ─── FIX: guests could never actually load an invite link ───
+-- guest_invites has RLS enabled but the only existing policy scopes every
+-- operation (select included) to `auth.uid() = created_by`. That means a
+-- collector opening /collect?token=... — who is anonymous, or signed in as a
+-- different account entirely — gets zero rows back from Postgres and the app
+-- reports "invalid or expired" even for a perfectly valid, unexpired token.
+--
+-- The fix: let anyone look up an ACTIVE invite by its token. This is safe
+-- because the token itself is the secret (24 random bytes, unguessable) —
+-- this mirrors how every other "magic link" table works. It does not expose
+-- inactive/disabled invites, and it doesn't grant insert/update/delete —
+-- those stay owner-only via the existing policy.
+create policy "Anyone can look up an active invite by its token" on guest_invites for select using (active = true);
