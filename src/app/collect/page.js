@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { calcSoilHealthScore } from '@/lib/soilScore';
@@ -7,7 +7,7 @@ import { calcSoilHealthScore } from '@/lib/soilScore';
 const CROPS = ['corn','soybeans','peanuts','tomatoes','berries','pasture','miscanthus','hemp','cannabis'];
 const CROP_LABELS = { corn:'Corn', soybeans:'Soybeans', peanuts:'Peanuts', tomatoes:'Tomatoes', berries:'Berries', pasture:'Pasture', miscanthus:'Miscanthus', hemp:'Hemp', cannabis:'Cannabis' };
 
-export default function CollectPage() {
+function CollectInner() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const supabase = createClient();
@@ -281,6 +281,8 @@ export default function CollectPage() {
     </div>
   );
 }
+
+export default function CollectPage(){ return <Suspense fallback={<div style={{minHeight:'100vh',background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center'}}><div style={{color:'var(--green)',fontFamily:'Syne,sans-serif'}}>Loading...</div></div>}><CollectInner/></Suspense>; }
 
 function F({ label, children }) {
   return (
