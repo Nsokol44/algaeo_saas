@@ -119,10 +119,12 @@ function CollectInner() {
     }
     if (!uid) throw new Error('Could not establish a session.');
     if (invite.trial_id) {
-      await supabase.from('guest_trial_access').upsert({ guest_user_id: uid, trial_id: invite.trial_id, invite_id: invite.id, role: invite.role || 'collector' });
+      const { error: taErr } = await supabase.from('guest_trial_access').upsert({ guest_user_id: uid, trial_id: invite.trial_id, invite_id: invite.id, role: invite.role || 'collector' });
+      if (taErr) throw taErr;
     }
     if (invite.farm_id) {
-      await supabase.from('guest_farm_access').upsert({ guest_user_id: uid, farm_id: invite.farm_id, invite_id: invite.id });
+      const { error: faErr } = await supabase.from('guest_farm_access').upsert({ guest_user_id: uid, farm_id: invite.farm_id, invite_id: invite.id });
+      if (faErr) throw faErr;
     }
     return uid;
   };
@@ -133,9 +135,10 @@ function CollectInner() {
     setViewError('');
     try {
       await ensureGuestAccess();
-      await supabase.rpc('increment_invite_use', { invite_id: invite.id }).catch(async () => {
+      const { error: rpcErr } = await supabase.rpc('increment_invite_use', { invite_id: invite.id });
+      if (rpcErr) {
         await supabase.from('guest_invites').update({ use_count: invite.use_count + 1 }).eq('id', invite.id);
-      });
+      }
       const [{ data: samples }, { data: entries }] = await Promise.all([
         supabase.from('soil_samples').select('*').eq('trial_id', invite.trial_id).order('created_at', { ascending: false }),
         supabase.from('trial_entries').select('*').eq('trial_id', invite.trial_id).order('entry_date', { ascending: false }),
@@ -231,15 +234,18 @@ function CollectInner() {
       }
 
       await supabase.from('soil_samples').insert({ ...rowBase, user_id: userId, photo_url: photoUrl });
-      await supabase.rpc('increment_invite_use', { invite_id: invite.id }).catch(async () => {
+      const { error: rpcErr2 } = await supabase.rpc('increment_invite_use', { invite_id: invite.id });
+      if (rpcErr2) {
         await supabase.from('guest_invites').update({ use_count: invite.use_count + 1 }).eq('id', invite.id);
-      });
+      }
       if (session?.user?.id) {
         if (invite.trial_id) {
-          await supabase.from('guest_trial_access').upsert({ guest_user_id: session.user.id, trial_id: invite.trial_id, invite_id: invite.id });
+          const { error: taErr2 } = await supabase.from('guest_trial_access').upsert({ guest_user_id: session.user.id, trial_id: invite.trial_id, invite_id: invite.id });
+          if (taErr2) console.error('guest_trial_access upsert failed:', taErr2);
         }
         if (invite.farm_id) {
-          await supabase.from('guest_farm_access').upsert({ guest_user_id: session.user.id, farm_id: invite.farm_id, invite_id: invite.id });
+          const { error: faErr2 } = await supabase.from('guest_farm_access').upsert({ guest_user_id: session.user.id, farm_id: invite.farm_id, invite_id: invite.id });
+          if (faErr2) console.error('guest_farm_access upsert failed:', faErr2);
         }
       }
     } else {

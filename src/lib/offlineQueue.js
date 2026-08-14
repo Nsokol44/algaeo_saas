@@ -119,10 +119,12 @@ export async function syncPending(supabase, { onProgress } = {}) {
         }
         if (!userId) throw new Error('Could not establish a session to sync this sample.');
         if (item.farmIdForGuestAccess) {
-          await supabase.from('guest_farm_access').upsert({ guest_user_id: userId, farm_id: item.farmIdForGuestAccess, invite_id: item.inviteId || null }).catch(() => {});
+          const { error: faErr } = await supabase.from('guest_farm_access').upsert({ guest_user_id: userId, farm_id: item.farmIdForGuestAccess, invite_id: item.inviteId || null });
+          if (faErr) console.error('guest_farm_access upsert failed during sync:', faErr);
         }
         if (item.trialIdForGuestAccess) {
-          await supabase.from('guest_trial_access').upsert({ guest_user_id: userId, trial_id: item.trialIdForGuestAccess, invite_id: item.inviteId || null }).catch(() => {});
+          const { error: taErr } = await supabase.from('guest_trial_access').upsert({ guest_user_id: userId, trial_id: item.trialIdForGuestAccess, invite_id: item.inviteId || null });
+          if (taErr) console.error('guest_trial_access upsert failed during sync:', taErr);
         }
       }
 
@@ -146,7 +148,7 @@ export async function syncPending(supabase, { onProgress } = {}) {
       if (insertErr) throw insertErr;
 
       if (item.inviteId != null) {
-        await supabase.rpc('increment_invite_use', { invite_id: item.inviteId }).catch(() => {});
+        try { await supabase.rpc('increment_invite_use', { invite_id: item.inviteId }); } catch { /* best-effort */ }
       }
 
       await removePending(item.clientId);
