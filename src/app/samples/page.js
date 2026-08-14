@@ -15,6 +15,7 @@ import { queueSample, isOnline } from '@/lib/offlineQueue';
 import { compressImage, dataUrlToBlob } from '@/lib/imageUtils';
 import { analyzeSoilPhoto } from '@/lib/soilVision';
 import { nearestSample } from '@/lib/geo';
+import { defaultFieldName, sampleLabel } from '@/lib/sampleLabel';
 
 const CROPS = ['corn','soybeans','peanuts','tomatoes','berries','pasture','miscanthus','hemp','cannabis'];
 const CROP_LABELS = { corn:'Corn', soybeans:'Soybeans', peanuts:'Peanuts', tomatoes:'Tomatoes', berries:'Berries', pasture:'Pasture', miscanthus:'Miscanthus', hemp:'Hemp', cannabis:'Cannabis' };
@@ -144,7 +145,7 @@ function SoilSamplesInner() {
         const el = document.createElement('div');
         el.style.cssText = `width:28px;height:28px;border-radius:50%;background:${color};border:3px solid #0a0c0a;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0a0c0a;font-family:Syne,sans-serif;`;
         el.textContent = (sample.health_score || '?').toString();
-        el.title = `${sample.field_name || 'Sample'} — Score: ${sample.health_score || '?'}/10`;
+        el.title = `${sampleLabel(sample)} — Score: ${sample.health_score || '?'}/10`;
         el.addEventListener('click', () => setSelectedSample(sample));
 
         const marker = new maplibregl.Marker({ element: el })
@@ -208,7 +209,7 @@ function SoilSamplesInner() {
       user_id: userId,
       farm_id: activeFarm?.id || null,
       trial_id: trialId || null,
-      field_name: form.fieldName || null,
+      field_name: form.fieldName || defaultFieldName(trialName || activeFarm?.nickname || activeFarm?.name),
       sample_date: form.sampleDate,
       lat: gps.position.lat,
       lng: gps.position.lng,
@@ -347,7 +348,7 @@ function SoilSamplesInner() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                   <div>
                     <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-                      {selectedSample.field_name || 'Soil Sample'}
+                      {sampleLabel(selectedSample)}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
                       {new Date(selectedSample.sample_date + 'T12:00:00').toLocaleDateString()} · {selectedSample.lat.toFixed(5)}, {selectedSample.lng.toFixed(5)}
@@ -427,7 +428,7 @@ function SoilSamplesInner() {
                 style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}>
                 {s.photo_url && <img src={s.photo_url} style={{ width: 48, height: 48, objectFit: 'cover', flexShrink: 0 }} alt="" />}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{s.field_name || 'Soil Sample'}</div>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{sampleLabel(s)}</div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
                     {new Date(s.sample_date + 'T12:00:00').toLocaleDateString()} · {s.lat.toFixed(4)}, {s.lng.toFixed(4)} · {s.depth_top_in}"–{s.depth_bottom_in}"
                   </div>

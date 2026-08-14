@@ -9,10 +9,12 @@ import { queueSample, isOnline } from '@/lib/offlineQueue';
 import { compressImage, dataUrlToBlob } from '@/lib/imageUtils';
 import { analyzeSoilPhoto } from '@/lib/soilVision';
 import { nearestSample } from '@/lib/geo';
+import { defaultFieldName, sampleLabel } from '@/lib/sampleLabel';
 import CompassNeedle from '@/components/ui/CompassNeedle';
 import AccuracyRing from '@/components/ui/AccuracyRing';
 import SessionSummary from '@/components/ui/SessionSummary';
 import OfflineBanner from '@/components/ui/OfflineBanner';
+import SampleDetailModal from '@/components/ui/SampleDetailModal';
 
 const CROPS = ['corn','soybeans','peanuts','tomatoes','berries','pasture','miscanthus','hemp','cannabis'];
 const CROP_LABELS = { corn:'Corn', soybeans:'Soybeans', peanuts:'Peanuts', tomatoes:'Tomatoes', berries:'Berries', pasture:'Pasture', miscanthus:'Miscanthus', hemp:'Hemp', cannabis:'Cannabis' };
@@ -26,13 +28,22 @@ function CollectInner() {
 
   const [invite, setInvite] = useState(null);
   const [error, setError] = useState('');
-  const [step, setStep] = useState('landing'); // landing | signin | collect | saved
+  const [step, setStep] = useState('landing'); // landing | signin | collect | view | saved
   const [session, setSession] = useState(null);
   const [saving, setSaving] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [guestEmail, setGuestEmail] = useState('');
   const [magicSent, setMagicSent] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const isViewer = invite?.role === 'viewer';
+
+  // View-only state — trial's samples/entries for a 'viewer' invite
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewSamples, setViewSamples] = useState([]);
+  const [viewEntries, setViewEntries] = useState([]);
+  const [viewingSample, setViewingSample] = useState(null);
+  const [viewError, setViewError] = useState('');
 
   const [form, setForm] = useState({
     fieldName: '', cropType: 'corn',
@@ -93,6 +104,50 @@ function CollectInner() {
 
   const continueAsGuest = () => setStep('collect');
 
+  /** Establishes a session (anonymous if needed) and grants trial/farm access — required
+   * before RLS will let a guest read the trial's samples/entries. Collectors get this
+   * deferred to save/sync time so they can start collecting fully offline; viewers need
+   * it up front since there's nothing to view without a network round-trip anyway. */
+  const ensureGuestAccess = async () => {
+    let uid = session?.user?.id;
+    if (!uid) {
+      const { data, error: signInErr } = await supabase.auth.signInAnonymously();
+      if (signInErr) throw signInErr;
+      uid = data?.user?.id;
+    }
+    if (!uid) throw new Error('Could not establish a session.');
+    if (invite.trial_id) {
+      await supabase.from('guest_trial_access').upsert({ guest_user_id: uid, trial_id: invite.trial_id, invite_id: invite.id, role: invite.role || 'collector' });
+    }
+    if (invite.farm_id) {
+      await supabase.from('guest_farm_access').upsert({ guest_user_id: uid, farm_id: invite.farm_id, invite_id: invite.id });
+    }
+    return uid;
+  };
+
+  const continueAsViewer = async () => {
+    if (!isOnline()) { setViewError('You need a connection to view trial data — this only works for collecting offline, not viewing.'); return; }
+    setViewLoading(true);
+    setViewError('');
+    try {
+      await ensureGuestAccess();
+      await supabase.rpc('increment_invite_use', { invite_id: invite.id }).catch(async () => {
+        await supabase.from('guest_invites').update({ use_count: invite.use_count + 1 }).eq('id', invite.id);
+      });
+      const [{ data: samples }, { data: entries }] = await Promise.all([
+        supabase.from('soil_samples').select('*').eq('trial_id', invite.trial_id).order('created_at', { ascending: false }),
+        supabase.from('trial_entries').select('*').eq('trial_id', invite.trial_id).order('entry_date', { ascending: false }),
+      ]);
+      setViewSamples(samples || []);
+      setViewEntries(entries || []);
+      setStep('view');
+    } catch (err) {
+      setViewError(err?.message || 'Could not load trial data. Please try again.');
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
   const handlePhoto = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -137,7 +192,7 @@ function CollectInner() {
     const rowBase = {
       farm_id: invite.farm_id || null,
       trial_id: invite.trial_id || null,
-      field_name: form.fieldName || null,
+      field_name: form.fieldName || defaultFieldName(invite?.field_trials?.name || farmName),
       sample_date: form.sampleDate,
       lat: gps.position.lat, lng: gps.position.lng,
       gps_accuracy_m: gps.position.accuracy,
@@ -241,25 +296,41 @@ function CollectInner() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', padding: 32 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
               <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
-                You've been invited to collect soil samples
+                {isViewer ? "You've been invited to view trial data" : "You've been invited to collect soil samples"}
               </div>
-              <CompassNeedle size={52} />
+              {!isViewer && <CompassNeedle size={52} />}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8, marginBottom: 24 }}>
-              <strong style={{ color: 'var(--text-dim)' }}>{invite.label}</strong> — collecting for <strong style={{ color: 'var(--text-dim)' }}>{contextLabel}</strong>
+              <strong style={{ color: 'var(--text-dim)' }}>{invite.label}</strong> — {isViewer ? 'viewing' : 'collecting for'} <strong style={{ color: 'var(--text-dim)' }}>{contextLabel}</strong>
             </div>
 
-            <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 24, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
-              You can collect samples right now without signing in — even out of signal, your samples save on this device and sync automatically once you're back in range. If you'd like to track your own results and get feedback, create a free guest account with just your email.
-            </div>
+            {isViewer ? (
+              <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 24, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                This is a read-only view — you'll see every GPS-tagged sample and trial entry logged so far (photos, scores, locations), but won't be able to add anything. You need a connection to load it.
+              </div>
+            ) : (
+              <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 24, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                You can collect samples right now without signing in — even out of signal, your samples save on this device and sync automatically once you're back in range. If you'd like to track your own results and get feedback, create a free guest account with just your email.
+              </div>
+            )}
+
+            {viewError && <div style={{ fontSize: 11, color: '#f87171', marginBottom: 14 }}>{viewError}</div>}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button className="btn-primary" onClick={continueAsGuest} style={{ padding: 14, fontSize: 13 }}>
-                📍 Start Collecting Now →
-              </button>
-              <button onClick={() => setStep('signin')} style={{ padding: 14, fontSize: 12, background: 'none', border: '1px solid var(--border2)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'DM Mono, monospace', letterSpacing: '0.04em' }}>
-                Create free account to track my results
-              </button>
+              {isViewer ? (
+                <button className="btn-primary" onClick={continueAsViewer} disabled={viewLoading} style={{ padding: 14, fontSize: 13 }}>
+                  {viewLoading ? 'Loading…' : '👁 View Trial Data →'}
+                </button>
+              ) : (
+                <>
+                  <button className="btn-primary" onClick={continueAsGuest} style={{ padding: 14, fontSize: 13 }}>
+                    📍 Start Collecting Now →
+                  </button>
+                  <button onClick={() => setStep('signin')} style={{ padding: 14, fontSize: 12, background: 'none', border: '1px solid var(--border2)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'DM Mono, monospace', letterSpacing: '0.04em' }}>
+                    Create free account to track my results
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -361,6 +432,62 @@ function CollectInner() {
             </div>
           </div>
         )}
+
+        {/* VIEW — read-only trial data for a 'viewer' invite */}
+        {step === 'view' && invite && (
+          <div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', padding: 24, marginBottom: 16 }}>
+              <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{trialName || contextLabel}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                {invite.field_trials?.crop_type}{invite.field_trials?.field_name ? ` · ${invite.field_trials.field_name}` : ''} · {viewSamples.length} sample{viewSamples.length !== 1 ? 's' : ''} · {viewEntries.length} entr{viewEntries.length !== 1 ? 'ies' : 'y'}
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px 20px', marginBottom: 16 }}>
+              <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>📍 Soil Samples</div>
+              {viewSamples.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No samples logged yet.</div>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {viewSamples.map(s => (
+                  <div key={s.id} onClick={() => setViewingSample(s)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface2)', border: '1px solid var(--border)', padding: '10px 12px', cursor: 'pointer' }}>
+                    {s.photo_url ? <img src={s.photo_url} style={{ width: 36, height: 36, objectFit: 'cover', flexShrink: 0 }} alt="" /> : <div style={{ width: 36, height: 36, flexShrink: 0, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>📍</div>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{sampleLabel(s)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{s.lat != null ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}` : 'No GPS'}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 16, fontWeight: 800, color: scoreColor(s.health_score || 5) }}>{s.health_score || '?'}</div>
+                      <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>{s.score_label || '—'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {viewEntries.length > 0 && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px 20px', marginBottom: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>🔬 Trial Entries</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {viewEntries.map(e => (
+                    <div key={e.id} style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '10px 12px', fontSize: 11, color: 'var(--text-dim)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{new Date(e.entry_date + 'T12:00:00').toLocaleDateString()}{e.week_number ? ` · Week ${e.week_number}` : ''}</span>
+                        <span style={{ color: e.algaeo_applied ? 'var(--green)' : 'var(--text-muted)' }}>{e.algaeo_applied ? '✓ Treated' : 'Control'}</span>
+                      </div>
+                      {(e.plant_height_in || e.vigor_score) && (
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+                          {e.plant_height_in ? `Height: ${e.plant_height_in}" ` : ''}{e.vigor_score ? `· Vigor: ${e.vigor_score}/10 ` : ''}{e.stress_score ? `· Stress: ${e.stress_score}/10` : ''}
+                        </div>
+                      )}
+                      {e.observations && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{e.observations}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {viewingSample && <SampleDetailModal sample={viewingSample} onClose={() => setViewingSample(null)} />}
 
         {/* SAVED */}
         {step === 'saved' && lastResult && (

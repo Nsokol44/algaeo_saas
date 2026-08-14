@@ -4,6 +4,8 @@ import{useRouter}from'next/navigation';
 import Link from'next/link';
 import Navbar from'@/components/layout/Navbar';
 import InviteModal from'@/components/ui/InviteModal';
+import SampleDetailModal from'@/components/ui/SampleDetailModal';
+import{sampleLabel}from'@/lib/sampleLabel';
 import{useFarm}from'@/lib/FarmContext';
 import{createClient}from'@/lib/supabase';
 const CROPS=['corn','soybeans','peanuts','tomatoes','berries','pasture','miscanthus','hemp','cannabis'];
@@ -14,7 +16,7 @@ const sampleScoreColor=s=>s>=8?'#4ade80':s>=6?'#fbbf24':s>=4?'#fb923c':'#f87171'
 export default function TrialsPage(){
   const{activeFarm}=useFarm();const router=useRouter();const supabase=createClient();
   const[userId,setUserId]=useState(null);const[trials,setTrials]=useState([]);const[publicTrials,setPublicTrials]=useState([]);const[view,setView]=useState('my');const[activeTrial,setActiveTrial]=useState(null);const[entries,setEntries]=useState([]);const[showNewTrial,setShowNewTrial]=useState(false);const[showNewEntry,setShowNewEntry]=useState(false);const[saving,setSaving]=useState(false);
-  const[trialSamples,setTrialSamples]=useState([]);const[loadingSamples,setLoadingSamples]=useState(false);const[showTrialInvite,setShowTrialInvite]=useState(false);
+  const[trialSamples,setTrialSamples]=useState([]);const[loadingSamples,setLoadingSamples]=useState(false);const[showTrialInvite,setShowTrialInvite]=useState(false);const[viewingSample,setViewingSample]=useState(null);
   const[trialForm,setTrialForm]=useState({name:'',cropType:'corn',fieldName:'',acres:'',startedDate:'',notes:'',isPublic:false});
   const[entryForm,setEntryForm]=useState({entryDate:new Date().toISOString().split('T')[0],weekNumber:'',algaeoApplied:true,applicationMethod:'foliar',plantHeightIn:'',canopyWidthIn:'',leafColorScore:'',vigorScore:'',stressScore:'',pestPressure:'',estimatedYield:'',yieldUnit:'',brixReading:'',standCount:'',soilTempF:'',airTempF:'',rainfallIn:'',observations:''});
   const[treatedPhoto,setTreatedPhoto]=useState(null);const[controlPhoto,setControlPhoto]=useState(null);const[treatedPreview,setTreatedPreview]=useState(null);const[controlPreview,setControlPreview]=useState(null);
@@ -77,11 +79,11 @@ export default function TrialsPage(){
           {!loadingSamples&&trialSamples.length>0&&(
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {trialSamples.map(s=>(
-                <div key={s.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--surface2)',border:'1px solid var(--border)',padding:'10px 12px'}}>
-                  {s.photo_url&&<img src={s.photo_url} style={{width:36,height:36,objectFit:'cover',flexShrink:0}} alt=""/>}
+                <div key={s.id} onClick={()=>setViewingSample(s)} style={{display:'flex',alignItems:'center',gap:12,background:'var(--surface2)',border:'1px solid var(--border)',padding:'10px 12px',cursor:'pointer'}}>
+                  {s.photo_url?<img src={s.photo_url} style={{width:36,height:36,objectFit:'cover',flexShrink:0}} alt=""/>:<div style={{width:36,height:36,flexShrink:0,background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>📍</div>}
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:11,color:'var(--text-dim)'}}>{s.field_name||'Soil Sample'} · {new Date(s.sample_date+'T12:00:00').toLocaleDateString()}</div>
-                    {s.notes&&<div style={{fontSize:10,color:'var(--text-muted)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.notes}</div>}
+                    <div style={{fontSize:11,color:'var(--text-dim)'}}>{sampleLabel(s)}</div>
+                    <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{s.lat!=null?`${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}`:'No GPS'}{s.notes?` · ${s.notes}`:''}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     <div style={{fontFamily:'Syne,sans-serif',fontSize:16,fontWeight:800,color:sampleScoreColor(s.health_score||5)}}>{s.health_score||'?'}</div>
@@ -140,6 +142,7 @@ export default function TrialsPage(){
       <button className="btn-primary" onClick={addEntry} disabled={saving}>{saving?'Saving...':'Save Entry →'}</button>
     </Modal>}
     {showTrialInvite&&activeTrial&&<InviteModal trial={activeTrial} onClose={()=>setShowTrialInvite(false)}/>}
+    {viewingSample&&<SampleDetailModal sample={viewingSample} onClose={()=>setViewingSample(null)}/>}
   </div></div>);
 }
 function Modal({title,onClose,children,wide}){return(<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:'var(--surface)',border:'1px solid var(--border2)',width:'100%',maxWidth:wide?680:520,maxHeight:'90vh',overflowY:'auto',padding:32}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:24}}><div style={{fontFamily:'Syne,sans-serif',fontSize:15,fontWeight:700,color:'var(--text)'}}>{title}</div><button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:16}}>✕</button></div><div style={{display:'flex',flexDirection:'column',gap:14}}>{children}</div></div></div>);}

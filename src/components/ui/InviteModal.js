@@ -16,6 +16,7 @@ export default function InviteModal({ farm, trial, onClose }) {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
+  const [role, setRole] = useState('collector'); // 'collector' | 'viewer' — only meaningful for trial-scoped invites
   const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => { loadInvites(); }, [scopeType, scopeId]);
@@ -36,7 +37,8 @@ export default function InviteModal({ farm, trial, onClose }) {
       farm_id: trial ? (trial.farm_id || null) : farm.id,
       trial_id: trial ? trial.id : null,
       created_by: user?.id,
-      label: label || 'Field Collectors',
+      label: label || (trial && role === 'viewer' ? 'Trial Viewers' : 'Field Collectors'),
+      role: trial ? role : 'collector',
     }).select().single();
     setCreating(false);
     if (!error && data) {
@@ -76,13 +78,33 @@ export default function InviteModal({ farm, trial, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', padding: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-          <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>👥 Invite Collectors</div>
+          <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>👥 {trial ? 'Invite People' : 'Invite Collectors'}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>✕</button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 22 }}>
-          Share a link so anyone — a scout, agronomist, or family member — can drop GPS-tagged soil samples for
+          Share a link so anyone — a scout, agronomist, or family member — can
+          {trial ? ' collect samples for, or just see the data on,' : ' drop GPS-tagged soil samples for'}
           {' '}<strong style={{ color: 'var(--text-dim)' }}>{scopeLabel || (trial ? 'this trial' : 'this farm')}</strong>. They don't need an Algaeo account, and it works even with no signal in the field.
         </div>
+
+        {trial && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {[
+              { key: 'collector', label: '📍 Collector', hint: 'can add samples' },
+              { key: 'viewer', label: '👁 Viewer', hint: 'can only view' },
+            ].map((r) => (
+              <button key={r.key} onClick={() => setRole(r.key)} style={{
+                flex: 1, textAlign: 'left', padding: '10px 12px', cursor: 'pointer', fontFamily: 'DM Mono, monospace',
+                background: role === r.key ? 'var(--green-glow)' : 'var(--surface2)',
+                border: `1px solid ${role === r.key ? 'var(--green-muted)' : 'var(--border)'}`,
+                color: role === r.key ? 'var(--green)' : 'var(--text-muted)',
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{r.label}</div>
+                <div style={{ fontSize: 9, marginTop: 2, opacity: 0.8 }}>{r.hint}</div>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 22 }}>
           <input
@@ -111,8 +133,11 @@ export default function InviteModal({ farm, trial, onClose }) {
             <div key={invite.id} style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '12px 14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 13, fontWeight: 600, color: invite.active ? 'var(--text)' : 'var(--text-muted)' }}>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 13, fontWeight: 600, color: invite.active ? 'var(--text)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     {invite.label || 'Field Collectors'}
+                    {invite.role === 'viewer' && (
+                      <span style={{ fontSize: 8, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--blue)', border: '1px solid rgba(96,165,250,0.35)', padding: '2px 6px' }}>👁 Viewer</span>
+                    )}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
                     {invite.use_count}/{invite.max_uses} uses · expires {new Date(invite.expires_at).toLocaleDateString()}
