@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import InviteModal from '@/components/ui/InviteModal';
 import AccuracyRing from '@/components/ui/AccuracyRing';
+import ExportMenu from '@/components/ui/ExportMenu';
 import SessionSummary from '@/components/ui/SessionSummary';
 import OfflineBanner from '@/components/ui/OfflineBanner';
 import { useFarm } from '@/lib/FarmContext';
@@ -223,13 +224,17 @@ function SoilSamplesInner() {
       ai_photo_analysis: aiAnalysis || null,
     };
 
+    let photoUploadFailed = false;
     if (isOnline()) {
       let photoUrl = null;
       if (photoPreview) {
         const blob = dataUrlToBlob(photoPreview);
         const path = `${userId}/samples/${Date.now()}.jpg`;
-        const { data: upload } = await supabase.storage.from('soil-photos').upload(path, blob, { contentType: 'image/jpeg' });
-        if (upload) {
+        const { data: upload, error: uploadErr } = await supabase.storage.from('soil-photos').upload(path, blob, { contentType: 'image/jpeg' });
+        if (uploadErr) {
+          console.error('Photo upload failed:', uploadErr);
+          photoUploadFailed = true;
+        } else if (upload) {
           const { data: urlData } = supabase.storage.from('soil-photos').getPublicUrl(path);
           photoUrl = urlData?.publicUrl;
         }
@@ -246,7 +251,7 @@ function SoilSamplesInner() {
     }
 
     setSessionSamples((prev) => [...prev, { score: score.score, lat: gps.position.lat, lng: gps.position.lng, timestamp: Date.now() }]);
-    setLastResult({ score: score.score, label: score.label, delta, offline: !isOnline() });
+    setLastResult({ score: score.score, label: score.label, delta, offline: !isOnline(), photoUploadFailed });
 
     setSaving(false);
     resetFormForNext();
@@ -310,6 +315,7 @@ function SoilSamplesInner() {
                 cursor: 'pointer', fontFamily: 'DM Mono, monospace',
               }}>👥 Invite</button>
             )}
+            <ExportMenu samples={samples} filename={activeFarm?.nickname || activeFarm?.name || 'soil-samples'} />
             <button className="btn-primary" onClick={() => setView('add')}>+ Collect Sample</button>
           </div>
         </div>
@@ -351,7 +357,7 @@ function SoilSamplesInner() {
                       {sampleLabel(selectedSample)}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                      {new Date(selectedSample.sample_date + 'T12:00:00').toLocaleDateString()} · {selectedSample.lat.toFixed(5)}, {selectedSample.lng.toFixed(5)}
+                      {new Date(selectedSample.sample_date + 'T12:00:00').toLocaleDateString()}{selectedSample.created_at ? ` · ${new Date(selectedSample.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''} · {selectedSample.lat.toFixed(5)}, {selectedSample.lng.toFixed(5)}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                       Depth: {selectedSample.depth_top_in}"–{selectedSample.depth_bottom_in}" · {CROP_LABELS[selectedSample.crop_type] || selectedSample.crop_type}
@@ -566,6 +572,12 @@ function SoilSamplesInner() {
                 ? 'No signal right now — this sample is stored on your device and will sync automatically once you\u2019re back in range.'
                 : 'Your GPS-tagged sample has been saved to the farm map.'}
             </div>
+
+            {lastResult.photoUploadFailed && (
+              <div style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.3)', color: 'var(--amber)', padding: '10px 14px', marginBottom: 20, fontSize: 11, lineHeight: 1.7, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+                ⚠ The photo didn't upload — everything else about this sample saved fine, but there's no image attached to it.
+              </div>
+            )}
 
             {lastResult.delta && (
               <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 20, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.7, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>

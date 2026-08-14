@@ -22,7 +22,9 @@ export default function SampleDetailModal({ sample, onClose }) {
             <div>
               <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{sampleLabel(sample)}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                {sample.sample_date && new Date(sample.sample_date + 'T12:00:00').toLocaleDateString()} · {CROP_LABELS[sample.crop_type] || sample.crop_type || '—'}
+                {sample.sample_date && new Date(sample.sample_date + 'T12:00:00').toLocaleDateString()}
+                {sample.created_at && ` · ${new Date(sample.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                {' · '}{CROP_LABELS[sample.crop_type] || sample.crop_type || '—'}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>

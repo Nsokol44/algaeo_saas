@@ -39,7 +39,11 @@ export async function POST(req) {
               ],
             },
           ],
-          generationConfig: { maxOutputTokens: 220, temperature: 0.4 },
+          // Generous token budget so any internal "thinking" tokens the model spends don't
+          // eat into the visible answer and cut it off mid-sentence — thinkingConfig support
+          // varies by which model "gemini-flash-latest" currently resolves to, so we don't
+          // try to force it off; a bigger budget is the safe fix that works regardless.
+          generationConfig: { maxOutputTokens: 1024, temperature: 0.4 },
         }),
       }
     );
@@ -50,8 +54,17 @@ export async function POST(req) {
     }
 
     const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join(' ').trim();
-    return NextResponse.json({ analysis: text || 'No analysis returned.' });
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.map((p) => p.text).filter(Boolean).join(' ').trim();
+    if (!text) {
+      // MAX_TOKENS with zero text usually means the whole budget went to internal
+      // reasoning — surface this distinctly rather than returning an empty/blank read.
+      if (candidate?.finishReason === 'MAX_TOKENS') {
+        return NextResponse.json({ error: 'AI analysis ran out of room before producing a read — try again.' }, { status: 502 });
+      }
+      return NextResponse.json({ analysis: 'No analysis returned.' });
+    }
+    return NextResponse.json({ analysis: text });
   } catch (err) {
     return NextResponse.json({ error: err?.message || 'Unknown error analyzing photo.' }, { status: 500 });
   }

@@ -131,8 +131,11 @@ export async function syncPending(supabase, { onProgress } = {}) {
         const blob = dataUrlToBlob(item.photoDataUrl);
         const path = `${item.storagePathPrefix || 'offline'}/${item.clientId}.jpg`;
         const { data: upload, error: upErr } = await supabase.storage.from('soil-photos').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-        if (upErr) throw upErr;
-        if (upload) {
+        if (upErr) {
+          // Don't let a photo failure block the sample itself from syncing —
+          // the GPS/score data is more important than the photo. Log and move on.
+          console.error('Photo upload failed during sync:', upErr);
+        } else if (upload) {
           const { data: urlData } = supabase.storage.from('soil-photos').getPublicUrl(path);
           photoUrl = urlData?.publicUrl || null;
         }

@@ -15,6 +15,8 @@ import AccuracyRing from '@/components/ui/AccuracyRing';
 import SessionSummary from '@/components/ui/SessionSummary';
 import OfflineBanner from '@/components/ui/OfflineBanner';
 import SampleDetailModal from '@/components/ui/SampleDetailModal';
+import TrialSamplesMap from '@/components/ui/TrialSamplesMap';
+import ExportMenu from '@/components/ui/ExportMenu';
 
 const CROPS = ['corn','soybeans','peanuts','tomatoes','berries','pasture','miscanthus','hemp','cannabis'];
 const CROP_LABELS = { corn:'Corn', soybeans:'Soybeans', peanuts:'Peanuts', tomatoes:'Tomatoes', berries:'Berries', pasture:'Pasture', miscanthus:'Miscanthus', hemp:'Hemp', cannabis:'Cannabis' };
@@ -205,6 +207,7 @@ function CollectInner() {
       ai_photo_analysis: aiAnalysis || null,
     };
 
+    let photoUploadFailed = false;
     if (isOnline()) {
       let userId = session?.user?.id;
       if (!userId) {
@@ -217,8 +220,11 @@ function CollectInner() {
       if (photoPreview) {
         const blob = dataUrlToBlob(photoPreview);
         const path = `guests/${userId}/${Date.now()}.jpg`;
-        const { data: upload } = await supabase.storage.from('soil-photos').upload(path, blob, { contentType: 'image/jpeg' });
-        if (upload) {
+        const { data: upload, error: uploadErr } = await supabase.storage.from('soil-photos').upload(path, blob, { contentType: 'image/jpeg' });
+        if (uploadErr) {
+          console.error('Photo upload failed:', uploadErr);
+          photoUploadFailed = true;
+        } else if (upload) {
           const { data: urlData } = supabase.storage.from('soil-photos').getPublicUrl(path);
           photoUrl = urlData?.publicUrl;
         }
@@ -250,7 +256,7 @@ function CollectInner() {
     }
 
     setSessionSamples((prev) => [...prev, { score: score.score, lat: gps.position.lat, lng: gps.position.lng, timestamp: Date.now() }]);
-    setLastResult({ score: score.score, label: score.label, delta, offline: !isOnline() });
+    setLastResult({ score: score.score, label: score.label, delta, offline: !isOnline(), photoUploadFailed });
 
     setSaving(false);
     resetFormForNext();
@@ -444,8 +450,16 @@ function CollectInner() {
             </div>
 
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px 20px', marginBottom: 16 }}>
-              <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>📍 Soil Samples</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>📍 Soil Samples</div>
+                {viewSamples.length > 0 && <ExportMenu samples={viewSamples} filename={trialName || 'trial-samples'} />}
+              </div>
               {viewSamples.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No samples logged yet.</div>}
+              {viewSamples.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <TrialSamplesMap samples={viewSamples} onSelectSample={setViewingSample} height={240} />
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {viewSamples.map(s => (
                   <div key={s.id} onClick={() => setViewingSample(s)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface2)', border: '1px solid var(--border)', padding: '10px 12px', cursor: 'pointer' }}>
@@ -503,6 +517,12 @@ function CollectInner() {
                 ? 'No signal right now — this sample is stored on your device and will sync automatically once you\u2019re back in range.'
                 : <>Saved to <strong style={{ color: 'var(--text-dim)' }}>{contextLabel}</strong>. {session ? 'You can log in to algaeo.io to see your results.' : 'Create a free guest account to track your results and receive Algaeo feedback.'}</>}
             </div>
+
+            {lastResult.photoUploadFailed && (
+              <div style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.3)', color: 'var(--amber)', padding: '10px 14px', marginBottom: 20, fontSize: 11, lineHeight: 1.7, textAlign: 'left' }}>
+                ⚠ The photo didn't upload — everything else about this sample saved fine, but there's no image attached to it.
+              </div>
+            )}
 
             {lastResult.delta && (
               <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '12px 14px', marginBottom: 20, fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.7, textAlign: 'left' }}>

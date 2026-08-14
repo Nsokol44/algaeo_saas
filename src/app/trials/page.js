@@ -5,6 +5,8 @@ import Link from'next/link';
 import Navbar from'@/components/layout/Navbar';
 import InviteModal from'@/components/ui/InviteModal';
 import SampleDetailModal from'@/components/ui/SampleDetailModal';
+import TrialSamplesMap from'@/components/ui/TrialSamplesMap';
+import ExportMenu from'@/components/ui/ExportMenu';
 import{sampleLabel}from'@/lib/sampleLabel';
 import{useFarm}from'@/lib/FarmContext';
 import{createClient}from'@/lib/supabase';
@@ -65,16 +67,22 @@ export default function TrialsPage(){
         <div style={{background:'var(--surface)',border:'1px solid var(--border)',padding:'16px 20px',marginBottom:16}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
             <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)'}}>📍 Soil Samples{trialSamples.length>0?` (${trialSamples.length})`:''}</div>
-            {activeTrial.user_id===userId&&trialSamples.length===0&&!loadingSamples&&(
-              <div style={{display:'flex',gap:8}}>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {trialSamples.length>0&&<ExportMenu samples={trialSamples} filename={activeTrial.name||'trial-samples'}/>}
+              {activeTrial.user_id===userId&&trialSamples.length===0&&!loadingSamples&&(<>
                 <button onClick={()=>setShowTrialInvite(true)} style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',background:'none',border:'1px solid var(--border2)',color:'var(--text-muted)',padding:'5px 10px',cursor:'pointer',fontFamily:'DM Mono,monospace'}}>👥 Invite Collectors</button>
                 <Link href={`/samples?view=add&trialId=${activeTrial.id}&trialName=${encodeURIComponent(activeTrial.name)}&fieldName=${encodeURIComponent(activeTrial.field_name||'')}&cropType=${activeTrial.crop_type}`} style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',background:'none',border:'1px solid var(--border2)',color:'var(--text-muted)',padding:'5px 10px',cursor:'pointer',fontFamily:'DM Mono,monospace',textDecoration:'none'}}>+ Collect First Sample</Link>
-              </div>
-            )}
+              </>)}
+            </div>
           </div>
           {loadingSamples&&<div style={{fontSize:11,color:'var(--text-muted)',padding:'12px 0'}}>Loading…</div>}
           {!loadingSamples&&trialSamples.length===0&&(
             <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.7}}>No soil samples logged for this field yet. Invite a collector or drop a GPS pin yourself.</div>
+          )}
+          {!loadingSamples&&trialSamples.length>0&&(
+            <div style={{marginBottom:12}}>
+              <TrialSamplesMap samples={trialSamples} onSelectSample={setViewingSample} height={260}/>
+            </div>
           )}
           {!loadingSamples&&trialSamples.length>0&&(
             <div style={{display:'flex',flexDirection:'column',gap:8}}>

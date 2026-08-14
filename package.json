@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@mapbox/shp-write": "^0.4.3",
     "@supabase/supabase-js": "^2.45.0",
     "chart.js": "^4.4.3",
     "jspdf": "^2.5.1",
